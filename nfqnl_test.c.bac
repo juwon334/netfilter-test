@@ -5,45 +5,19 @@
 #include <linux/types.h>
 #include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <errno.h>
-#include <string.h>
+#define ETHER_ADDR_LEN 6
 #include <libnetfilter_queue/libnetfilter_queue.h>
-#include "nfqnl_test.h"
+
 void dump(unsigned char* buf, int size) {
 	int i;
-	char tmp[1024];
-	u_char* packet;
-	u_int8_t iplen = 0;
 	for (i = 0; i < size; i++) {
 		if (i != 0 && i % 16 == 0)
 			printf("\n");
-		tmp[i] = buf[i];
 		printf("%02X ", buf[i]);
 	}
-
 	printf("\n");
-
 }
 
-int deny(unsigned char* buf, int size){
-	struct ip_header *ip = (struct ip_header *)buf;
-	if(ip->protocol == 6){ // == 연산자를 사용하도록 수정했습니다.
-		struct tcp_header *tcp = (struct tcp_header *)(buf + ip->ihl * 4);
-		char *payload = (char *)tcp + tcp->doff * 4;
-		if (strstr(payload, "Host: ")) {
-			char *start = strstr(payload, "Host: ") + 6;
-			char *end = strstr(start, "\r\n");
-			if (end) {
-				char host[256] = {0};
-				strncpy(host, start, end - start);
-				printf("HTTP GET request to host: %s\n", host);
-				if (strcmp(host, "test.gilgil.net") == 0) {
-					return 1;
-				}
-			}
-		}
-	}
-	return 0;
-}
 /* returns packet id */
 static u_int32_t print_pkt (struct nfq_data *tb)
 {
@@ -92,32 +66,22 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 		printf("physoutdev=%u ", ifi);
 
 	ret = nfq_get_payload(tb, &data);
-
 	if (ret >= 0){
 		printf("payload_len=%d\n", ret);
 		dump(data,ret);
-		//deny(data,ret);
+
 	}
 
 	fputc('\n', stdout);
-
 	return id;
 }
 
+
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *data)
 {
-    u_int32_t id = print_pkt(nfa);
-    printf("entering callback\n");
-
-    unsigned char *packet_data;
-    int packet_len = nfq_get_payload(nfa, &packet_data);
-
-    if (packet_len >= 0 && deny(packet_data, packet_len)) {
-        printf("Dropping packet to blocked-domain.com\n");
-        return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
-    }
-
-    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+	u_int32_t id = print_pkt(nfa);
+	printf("entering callback\n");
+	return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
 
 int main(int argc, char **argv)
@@ -128,7 +92,6 @@ int main(int argc, char **argv)
 	int fd;
 	int rv;
 	char buf[4096] __attribute__ ((aligned));
-
 
 	printf("opening library handle\n");
 	h = nfq_open();
@@ -165,13 +128,11 @@ int main(int argc, char **argv)
 	fd = nfq_fd(h);
 
 	for (;;) {
-
 		if ((rv = recv(fd, buf, sizeof(buf), 0)) >= 0) {
 			printf("pkt received\n");
 			nfq_handle_packet(h, buf, rv);
 			continue;
 		}
-
 		if (rv < 0 && errno == ENOBUFS) {
 			printf("losing packets!\n");
 			continue;
