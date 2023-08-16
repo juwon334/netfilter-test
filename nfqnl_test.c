@@ -22,7 +22,7 @@ void dump(unsigned char* buf, int size) {
 
 }
 
-int deny(unsigned char* buf, int size){
+int deny(unsigned char* buf, int size, char* host){
 	struct ip_header *ip = (struct ip_header *)buf;
 	if(ip->protocol == 6){
 		struct tcp_header *tcp = (struct tcp_header *)(buf + ip->ihl * 4);
@@ -31,10 +31,10 @@ int deny(unsigned char* buf, int size){
 			char *start = strstr(payload, "Host: ") + 6;
 			char *end = strstr(start, "\r\n");
 			if (end) {
-				char host[256] = {0};
-				strncpy(host, start, end - start);
+				char nhost[256] = {0};
+				strncpy(nhost, start, end - start);
 				printf("HTTP GET request to host: %s\n", host);
-				if (strcmp(host, "test.gilgil.net") == 0) {
+				if (strcmp(nhost, host) == 0) {
 					return 1;
 				}
 			}
@@ -94,28 +94,27 @@ static u_int32_t print_pkt (struct nfq_data *tb)
 	if (ret >= 0){
 		printf("payload_len=%d\n", ret);
 		dump(data,ret);
-		//deny(data,ret);
 	}
 
 	fputc('\n', stdout);
 
 	return id;
 }
+static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *data) {
 
-static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg, struct nfq_data *nfa, void *data)
-{
-    u_int32_t id = print_pkt(nfa);
-    printf("entering callback\n");
+	char *host = (char *)data;
+	u_int32_t id = print_pkt(nfa);
+	printf("entering callback\n");
 
-    unsigned char *packet_data;
-    int packet_len = nfq_get_payload(nfa, &packet_data);
+	unsigned char *packet_data;
+	int packet_len = nfq_get_payload(nfa, &packet_data);
 
-    if (packet_len >= 0 && deny(packet_data, packet_len)) {
-        printf("Dropping packet to blocked-domain.com\n");
-        return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
-    }
+	if (packet_len >= 0 && deny(packet_data, packet_len,host)) {
+		printf("Dropping packet to %s\n",host);
+		return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
+	}
 
-    return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+	return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
 
 int main(int argc, char **argv)
@@ -126,6 +125,7 @@ int main(int argc, char **argv)
 	int fd;
 	int rv;
 	char buf[4096] __attribute__ ((aligned));
+	char *blocked_host = argv[1];
 
 
 	printf("opening library handle\n");
@@ -148,7 +148,7 @@ int main(int argc, char **argv)
 	}
 
 	printf("binding this socket to queue '0'\n");
-	qh = nfq_create_queue(h,  0, &cb, NULL);
+	qh = nfq_create_queue(h,  0, &cb, blocked_host);
 	if (!qh) {
 		fprintf(stderr, "error during nfq_create_queue()\n");
 		exit(1);
