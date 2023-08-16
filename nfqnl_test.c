@@ -10,13 +10,11 @@
 #include "nfqnl_test.h"
 void dump(unsigned char* buf, int size) {
 	int i;
-	char tmp[1024];
 	u_char* packet;
 	u_int8_t iplen = 0;
 	for (i = 0; i < size; i++) {
 		if (i != 0 && i % 16 == 0)
 			printf("\n");
-		tmp[i] = buf[i];
 		printf("%02X ", buf[i]);
 	}
 
@@ -26,7 +24,7 @@ void dump(unsigned char* buf, int size) {
 
 int deny(unsigned char* buf, int size){
 	struct ip_header *ip = (struct ip_header *)buf;
-	if(ip->protocol == 6){ // == 연산자를 사용하도록 수정했습니다.
+	if(ip->protocol == 6){
 		struct tcp_header *tcp = (struct tcp_header *)(buf + ip->ihl * 4);
 		char *payload = (char *)tcp + tcp->doff * 4;
 		if (strstr(payload, "Host: ")) {
