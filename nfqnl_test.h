@@ -1,3 +1,13 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <linux/types.h>
+#include <linux/netfilter.h>            /* for NF_ACCEPT */
+#include <errno.h>
+#include <string.h>
+#include <libnetfilter_queue/libnetfilter_queue.h>
+
 struct ip_header {
     u_int8_t ihl:4, version:4;
     u_int8_t tos;
